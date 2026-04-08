@@ -9,6 +9,13 @@ import { priority_levels } from '../utils/priority.js';
 import { statusLabel } from '../utils/status.js';
 import { showToast } from '../utils/toast.js';
 import { createTypeBadge } from '../utils/type-badge.js';
+import {
+  computeWorkflowTransition,
+  DEFAULT_WORKFLOW_LABEL,
+  getWorkflowLabel,
+  getWorkflowState,
+  WORKFLOW_TRANSITIONS
+} from '../utils/workflow-labels.js';
 
 /**
  * Format a date string for display.
@@ -117,6 +124,26 @@ export function createDetailView(
 
   /** @type {HTMLDialogElement | null} */
   let delete_dialog = null;
+
+  /**
+   * Normalize backend replies that may return an issue object or a single-item array.
+   *
+   * @param {unknown} payload
+   * @returns {IssueDetail | null}
+   */
+  function toIssueDetail(payload) {
+    if (Array.isArray(payload)) {
+      const first = payload[0];
+      if (first && typeof first === 'object') {
+        return /** @type {IssueDetail} */ (first);
+      }
+      return null;
+    }
+    if (payload && typeof payload === 'object') {
+      return /** @type {IssueDetail} */ (payload);
+    }
+    return null;
+  }
 
   function ensureDeleteDialog() {
     if (delete_dialog) return delete_dialog;
@@ -421,8 +448,9 @@ export function createDetailView(
         id: current.id,
         label: text
       });
-      if (updated && typeof updated === 'object') {
-        current = /** @type {IssueDetail} */ (updated);
+      const next = toIssueDetail(updated);
+      if (next) {
+        current = next;
         new_label_text = '';
         doRender();
       }
@@ -447,8 +475,9 @@ export function createDetailView(
         id: current.id,
         label
       });
-      if (updated && typeof updated === 'object') {
-        current = /** @type {IssueDetail} */ (updated);
+      const next = toIssueDetail(updated);
+      if (next) {
+        current = next;
         doRender();
       }
     } catch (err) {
@@ -456,6 +485,66 @@ export function createDetailView(
       showToast('Failed to remove label', 'error');
     } finally {
       pending = false;
+    }
+  }
+
+  /**
+   * @param {string} label
+   */
+  function workflowLabelText(label) {
+    return String(label)
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  /**
+   * @param {string} target
+   */
+  async function onWorkflowTransition(target) {
+    if (!current || pending) {
+      return;
+    }
+    const current_workflow_label = getWorkflowLabel(current.labels || []);
+    const is_unassigned_to_created =
+      current_workflow_label.length === 0 && target === DEFAULT_WORKFLOW_LABEL;
+    const transition = is_unassigned_to_created
+      ? {
+          current: '',
+          target
+        }
+      : computeWorkflowTransition(current.labels || [], target);
+    if (!transition) {
+      return;
+    }
+    pending = true;
+    doRender();
+    try {
+      const current_label = transition.current;
+      if (current_label && current_label !== target) {
+        const removed = await sendFn('label-remove', {
+          id: current.id,
+          label: current_label
+        });
+        const removed_issue = toIssueDetail(removed);
+        if (removed_issue) {
+          current = removed_issue;
+        }
+      }
+      const added = await sendFn('label-add', {
+        id: current.id,
+        label: target
+      });
+      const added_issue = toIssueDetail(added);
+      if (added_issue) {
+        current = added_issue;
+      }
+    } catch (err) {
+      log('workflow transition failed %s %o', String(current.id), err);
+      showToast('Failed to transition workflow state', 'error');
+    } finally {
+      pending = false;
+      doRender();
     }
   }
   /**
@@ -1091,7 +1180,15 @@ export function createDetailView(
 
     // Labels section
     const labels = Array.isArray(issue.labels) ? issue.labels : [];
-    const labels_block = html`<div class="props-card labels">
+    const has_workflow_label = getWorkflowLabel(labels).length > 0;
+    const workflow_state = has_workflow_label ? getWorkflowState(labels) : '';
+    const transition_targets = has_workflow_label
+      ? WORKFLOW_TRANSITIONS[workflow_state] || []
+      : ['created'];
+    const labels_block = html`<div
+      class=${`props-card labels ${pending ? 'is-busy' : ''}`}
+      aria-busy=${pending ? 'true' : 'false'}
+    >
       <div>
         <div class="props-card__title">Labels</div>
       </div>
@@ -1124,6 +1221,23 @@ export function createDetailView(
           @keydown=${onLabelKeydown}
         />
         <button @click=${onAddLabel}>Add</button>
+      </div>
+      <div class="props-card__footer">
+        <div class="muted">
+          Workflow:
+          ${has_workflow_label ? workflowLabelText(workflow_state) : 'Unassigned'}
+        </div>
+        <div>
+          ${transition_targets.map(
+            (target) => html`<button
+              style="margin: 4px 6px 0 0"
+              ?disabled=${pending}
+              @click=${() => onWorkflowTransition(target)}
+            >
+              ${workflowLabelText(target)}
+            </button>`
+          )}
+        </div>
       </div>
     </div>`;
 

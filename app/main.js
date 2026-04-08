@@ -344,9 +344,9 @@ export function bootstrap(root_element) {
       };
       client.onConnection(onConn);
     }
-    // Load persisted filters (status/search/type) from localStorage
-    /** @type {{ status: 'all'|'open'|'in_progress'|'closed'|'ready', search: string, type: string }} */
-    let persisted_filters = { status: 'all', search: '', type: '' };
+    // Load persisted filters (status/search/type/labels) from localStorage
+    /** @type {{ status: 'all'|'open'|'in_progress'|'closed'|'ready', search: string, type: string|string[], labels: string[] }} */
+    let persisted_filters = { status: 'all', search: '', type: '', labels: [] };
     try {
       const raw = window.localStorage.getItem('beads-ui.filters');
       if (raw) {
@@ -374,7 +374,14 @@ export function bootstrap(root_element) {
               ? obj.status
               : 'all',
             search: typeof obj.search === 'string' ? obj.search : '',
-            type: parsed_type
+            type: parsed_type,
+            labels: Array.isArray(obj.labels)
+              ? obj.labels
+                  .map((/** @type {unknown} */ label) =>
+                    String(label || '').trim()
+                  )
+                  .filter((/** @type {string} */ label) => label.length > 0)
+              : []
           };
         }
       }
@@ -500,7 +507,8 @@ export function bootstrap(root_element) {
       const data = {
         status: s.filters.status,
         search: s.filters.search,
-        type: typeof s.filters.type === 'string' ? s.filters.type : ''
+        type: typeof s.filters.type === 'string' ? s.filters.type : '',
+        labels: Array.isArray(s.filters.labels) ? s.filters.labels : []
       };
       window.localStorage.setItem('beads-ui.filters', JSON.stringify(data));
     });

@@ -5,6 +5,7 @@ import { ISSUE_TYPES, typeLabel } from '../utils/issue-type.js';
 import { issueHashFor } from '../utils/issue-url.js';
 import { debug } from '../utils/logging.js';
 import { statusLabel } from '../utils/status.js';
+import { WORKFLOW_LABELS } from '../utils/workflow-labels.js';
 import { createIssueRowRenderer } from './issue-row.js';
 
 // List view implementation; requires a transport send function.
@@ -60,6 +61,9 @@ export function createListView(
   let unsubscribe = null;
   let status_dropdown_open = false;
   let type_dropdown_open = false;
+  let labels_dropdown_open = false;
+  /** @type {string[]} */
+  let label_filters = [];
 
   /**
    * Normalize legacy string filter to array format.
@@ -80,6 +84,16 @@ export function createListView(
    * @returns {string[]}
    */
   function normalizeTypeFilter(val) {
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string' && val !== '') return [val];
+    return [];
+  }
+
+  /**
+   * @param {string | string[] | undefined} val
+   * @returns {string[]}
+   */
+  function normalizeLabelFilter(val) {
     if (Array.isArray(val)) return val;
     if (typeof val === 'string' && val !== '') return [val];
     return [];
@@ -152,6 +166,22 @@ export function createListView(
   };
 
   /**
+   * @param {string} label
+   */
+  const toggleLabelFilter = (label) => {
+    if (label_filters.includes(label)) {
+      label_filters = label_filters.filter((it) => it !== label);
+    } else {
+      label_filters = [...label_filters, label];
+    }
+    log('label toggle %s -> %o', label, label_filters);
+    if (store) {
+      store.setState({ filters: { labels: label_filters } });
+    }
+    doRender();
+  };
+
+  /**
    * Toggle status dropdown open/closed.
    *
    * @param {Event} e
@@ -172,6 +202,18 @@ export function createListView(
     e.stopPropagation();
     type_dropdown_open = !type_dropdown_open;
     status_dropdown_open = false;
+    labels_dropdown_open = false;
+    doRender();
+  };
+
+  /**
+   * @param {Event} e
+   */
+  const toggleLabelsDropdown = (e) => {
+    e.stopPropagation();
+    labels_dropdown_open = !labels_dropdown_open;
+    status_dropdown_open = false;
+    type_dropdown_open = false;
     doRender();
   };
 
@@ -196,6 +238,7 @@ export function createListView(
       status_filters = normalizeStatusFilter(s.filters.status);
       search_text = s.filters.search || '';
       type_filters = normalizeTypeFilter(s.filters.type);
+      label_filters = normalizeLabelFilter(s.filters.labels);
     }
   }
   // Initial values are reflected via bound `.value` in the template
@@ -224,6 +267,12 @@ export function createListView(
       filtered = filtered.filter((it) =>
         type_filters.includes(String(it.issue_type || ''))
       );
+    }
+    if (label_filters.length > 0) {
+      filtered = filtered.filter((it) => {
+        const issue_labels = Array.isArray(it.labels) ? it.labels : [];
+        return issue_labels.some((label) => label_filters.includes(label));
+      });
     }
     // Sorting: closed list is a special case → sort by closed_at desc only
     if (status_filters.length === 1 && status_filters[0] === 'closed') {
@@ -270,6 +319,29 @@ export function createListView(
                     @change=${() => toggleTypeFilter(t)}
                   />
                   ${typeLabel(t)}
+                </label>
+              `
+            )}
+          </div>
+        </div>
+        <div class="filter-dropdown ${labels_dropdown_open ? 'is-open' : ''}">
+          <button
+            class="filter-dropdown__trigger"
+            @click=${toggleLabelsDropdown}
+          >
+            ${getDropdownDisplayText(label_filters, 'Labels', (it) => it)}
+            <span class="filter-dropdown__arrow">▾</span>
+          </button>
+          <div class="filter-dropdown__menu">
+            ${WORKFLOW_LABELS.map(
+              (label) => html`
+                <label class="filter-dropdown__option">
+                  <input
+                    type="checkbox"
+                    .checked=${label_filters.includes(label)}
+                    @change=${() => toggleLabelFilter(label)}
+                  />
+                  ${label}
                 </label>
               `
             )}
@@ -511,9 +583,10 @@ export function createListView(
   const clickOutsideHandler = (e) => {
     const target = /** @type {HTMLElement|null} */ (e.target);
     if (target && !target.closest('.filter-dropdown')) {
-      if (status_dropdown_open || type_dropdown_open) {
+      if (status_dropdown_open || type_dropdown_open || labels_dropdown_open) {
         status_dropdown_open = false;
         type_dropdown_open = false;
+        labels_dropdown_open = false;
         doRender();
       }
     }
@@ -549,6 +622,13 @@ export function createListView(
           JSON.stringify(next_type_arr) !== JSON.stringify(type_filters);
         if (type_changed) {
           type_filters = next_type_arr;
+          needs_render = true;
+        }
+        const next_labels_arr = normalizeLabelFilter(s.filters.labels);
+        const labels_changed =
+          JSON.stringify(next_labels_arr) !== JSON.stringify(label_filters);
+        if (labels_changed) {
+          label_filters = next_labels_arr;
           needs_render = true;
         }
         if (needs_render) {

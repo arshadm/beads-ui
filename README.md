@@ -19,6 +19,7 @@
 - ✨ **Zero setup** – just run `bdui start`
 - 📺 **Live updates** – Monitors the beads database for changes
 - 🔎 **Issues view** – Filter and search issues, edit inline
+- 🏷️ **Label workflow** – Drive custom task workflow states through labels
 - ⛰️ **Epics view** – Show progress per epic, expand rows, edit inline
 - 🏂 **Board view** – Blocked / Ready / In progress / Closed columns
 - ⌨️ **Keyboard navigation** – Navigate and edit without touching the mouse
@@ -48,6 +49,85 @@ See `bdui --help` for options.
 **Board**
 
 ![Board view](https://github.com/mantoni/beads-ui/raw/main/media/bdui-board.png)
+
+## Label-driven workflow
+
+This repository now supports a label-based workflow model for teams that need
+more granular lifecycle states than native Beads status values.
+
+### Workflow labels
+
+- `created`
+- `needs-planning`
+- `planned`
+- `ready-for-dev`
+- `in-progress`
+- `pr-created`
+- `merged`
+- `blocked`
+- `closed`
+
+### Workflow behavior
+
+- New issues created from the UI are auto-labeled `created`.
+- Exactly one workflow label is maintained at a time (non-workflow labels are
+  preserved).
+- In issue details, transition buttons are shown based on the current workflow
+  label.
+- If an issue has no workflow label, the UI shows `Workflow: Unassigned` and
+  only allows transition to `Created`.
+- Busy cursor feedback is shown while workflow transitions are being applied.
+
+### Transition rules
+
+- `created` -> `needs-planning`, `blocked`, `closed`
+- `needs-planning` -> `planned`, `blocked`, `closed`
+- `planned` -> `ready-for-dev`, `needs-planning`, `blocked`, `closed`
+- `ready-for-dev` -> `in-progress`, `needs-planning`, `planned`, `blocked`,
+  `closed`
+- `in-progress` -> `pr-created`, `blocked`, `closed`
+- `pr-created` -> `blocked`, `closed`
+- `blocked` -> any other workflow state
+- `closed` -> any other workflow state
+- `merged` -> no outgoing transitions
+
+### Issues filter updates
+
+- Issues list now includes a **Labels** multi-select dropdown.
+- Selecting multiple labels uses OR semantics.
+- Selecting no labels disables label filtering (show all issues).
+- Filter dropdown layering and opacity are tuned so menus render above the list
+  content.
+
+### Quick demo
+
+Create one issue per workflow state for fast UI testing:
+
+```sh
+bd create "WF demo - created" --type task --priority 2
+bd create "WF demo - needs-planning" --type task --priority 2
+bd create "WF demo - planned" --type task --priority 2
+bd create "WF demo - ready-for-dev" --type task --priority 2
+bd create "WF demo - in-progress" --type task --priority 2
+bd create "WF demo - pr-created" --type task --priority 2
+bd create "WF demo - merged" --type task --priority 2
+bd create "WF demo - blocked" --type task --priority 2
+bd create "WF demo - closed" --type task --priority 2
+```
+
+Apply workflow labels (replace IDs with your created issue IDs):
+
+```sh
+bd label add <id-created> created
+bd label add <id-needs-planning> needs-planning
+bd label add <id-planned> planned
+bd label add <id-ready-for-dev> ready-for-dev
+bd label add <id-in-progress> in-progress
+bd label add <id-pr-created> pr-created
+bd label add <id-merged> merged
+bd label add <id-blocked> blocked
+bd label add <id-closed> closed
+```
 
 ## Environment variables
 
