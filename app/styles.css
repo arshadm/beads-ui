@@ -375,6 +375,7 @@ a {
 .panel__header {
   position: sticky;
   top: 0;
+  z-index: 20;
   background: inherit;
   display: flex;
   align-items: center;
@@ -923,6 +924,7 @@ html[data-theme='dark'] {
 .filter-dropdown {
   position: relative;
   display: inline-block;
+  z-index: 30;
 }
 
 .filter-dropdown__trigger {
@@ -958,11 +960,11 @@ html[data-theme='dark'] {
   left: 0;
   margin-top: 4px;
   min-width: 140px;
-  background: var(--panel-bg);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  z-index: 2000;
   padding: 4px 0;
 }
 
@@ -1872,6 +1874,10 @@ html[data-theme='dark'] {
 }
 .props-card__footer input {
   flex: 1;
+}
+.props-card.labels.is-busy,
+.props-card.labels.is-busy * {
+  cursor: wait !important;
 }
 
 /* List row layout closer to mock */

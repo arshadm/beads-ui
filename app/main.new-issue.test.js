@@ -132,6 +132,12 @@ describe('UI-106 new issue flow', () => {
     const types = calls.map((c) => c.type);
     expect(types).toContain('create-issue');
     expect(types).toContain('label-add');
+    const labelAdds = calls
+      .filter((c) => c.type === 'label-add')
+      .map((c) => c.payload.label);
+    expect(labelAdds).toContain('created');
+    expect(labelAdds).toContain('alpha');
+    expect(labelAdds).toContain('beta');
 
     // Details dialog opened for created id
     const details = /** @type {HTMLDialogElement} */ (

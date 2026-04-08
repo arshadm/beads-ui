@@ -1,16 +1,20 @@
 import { createServer } from 'node:http';
+import dotenv from 'dotenv';
 import { createApp } from './app.js';
 import { printServerUrl } from './cli/daemon.js';
 import { getConfig } from './config.js';
 import { resolveWorkspaceDatabase } from './db.js';
 import { debug, enableAllDebug } from './logging.js';
+import { createRabbitPublisher } from './rabbitmq.js';
 import { registerWorkspace, watchRegistry } from './registry-watcher.js';
 import { watchDb } from './watcher.js';
-import { attachWsServer } from './ws.js';
+import { attachWsServer, setTransitionPublisher } from './ws.js';
 
 if (process.argv.includes('--debug') || process.argv.includes('-d')) {
   enableAllDebug();
 }
+
+dotenv.config();
 
 // Parse --host and --port from argv and set env vars before getConfig()
 for (let i = 0; i < process.argv.length; i++) {
@@ -26,6 +30,8 @@ const config = getConfig();
 const app = createApp(config);
 const server = createServer(app);
 const log = debug('server');
+const rabbit_publisher = createRabbitPublisher(config.rabbitmq);
+setTransitionPublisher(rabbit_publisher);
 
 // Register the initial workspace (from cwd) so it appears in the workspace picker
 // even without the beads daemon running
@@ -74,3 +80,9 @@ server.on('error', (err) => {
   log('server error %o', err);
   process.exitCode = 1;
 });
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    void rabbit_publisher.close();
+  });
+}

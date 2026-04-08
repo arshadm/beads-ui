@@ -15,6 +15,64 @@ import { keyOf, registry } from './subscriptions.js';
 import { validateSubscribeListPayload } from './validators.js';
 
 const log = debug('ws');
+/** @type {{ isEnabled?: () => boolean, publishTransitionEvent?: (event: { taskId: string, previousLabel: string | null, newLabel: string | null, taskStatus: string }) => Promise<{ ok: boolean, error?: string }> } | null} */
+let TRANSITION_PUBLISHER = null;
+
+/**
+ * @param {{ isEnabled?: () => boolean, publishTransitionEvent?: (event: { taskId: string, previousLabel: string | null, newLabel: string | null, taskStatus: string }) => Promise<{ ok: boolean, error?: string }> } | null} publisher
+ */
+export function setTransitionPublisher(publisher) {
+  TRANSITION_PUBLISHER = publisher;
+}
+
+/**
+ * @param {unknown} payload
+ * @returns {{ id?: string, status?: string } | null}
+ */
+function getIssueFromShowPayload(payload) {
+  if (Array.isArray(payload)) {
+    const first = payload[0];
+    return first && typeof first === 'object'
+      ? /** @type {{ id?: string, status?: string }} */ (first)
+      : null;
+  }
+  if (payload && typeof payload === 'object') {
+    return /** @type {{ id?: string, status?: string }} */ (payload);
+  }
+  return null;
+}
+
+/**
+ * @param {{ id?: string, status?: string } | null} issue
+ * @param {string | null} previousLabel
+ * @param {string | null} newLabel
+ * @returns {Promise<{ ok: boolean, error?: string }>}
+ */
+async function publishTransitionIfConfigured(issue, previousLabel, newLabel) {
+  if (
+    !TRANSITION_PUBLISHER ||
+    typeof TRANSITION_PUBLISHER.isEnabled !== 'function' ||
+    !TRANSITION_PUBLISHER.isEnabled()
+  ) {
+    return { ok: true };
+  }
+  if (
+    !issue ||
+    typeof issue.id !== 'string' ||
+    issue.id.length === 0 ||
+    typeof issue.status !== 'string' ||
+    issue.status.length === 0 ||
+    typeof TRANSITION_PUBLISHER.publishTransitionEvent !== 'function'
+  ) {
+    return { ok: false, error: 'Missing issue data for RabbitMQ publish' };
+  }
+  return TRANSITION_PUBLISHER.publishTransitionEvent({
+    taskId: issue.id,
+    previousLabel,
+    newLabel,
+    taskStatus: issue.status
+  });
+}
 
 /**
  * Debounced refresh scheduling for active list subscriptions.
@@ -808,6 +866,20 @@ export async function handleMessage(ws, data) {
       );
       return;
     }
+    const issue = getIssueFromShowPayload(shown.stdoutJson);
+    const published = await publishTransitionIfConfigured(issue, null, null);
+    if (!published.ok) {
+      ws.send(
+        JSON.stringify(
+          makeError(
+            req,
+            'bd_error',
+            published.error || 'Failed to publish RabbitMQ transition event'
+          )
+        )
+      );
+      return;
+    }
     ws.send(JSON.stringify(makeOk(req, shown.stdoutJson)));
     // After mutation, refresh active subscriptions once (watcher or timeout)
     try {
@@ -1071,11 +1143,12 @@ export async function handleMessage(ws, data) {
   // label-add: payload { id: string, label: string }
   if (req.type === 'label-add') {
     const { id, label } = /** @type {any} */ (req.payload || {});
+    const normalized_label = String(label || '').trim();
     if (
       typeof id !== 'string' ||
       id.length === 0 ||
       typeof label !== 'string' ||
-      label.trim().length === 0
+      normalized_label.length === 0
     ) {
       ws.send(
         JSON.stringify(
@@ -1088,7 +1161,7 @@ export async function handleMessage(ws, data) {
       );
       return;
     }
-    const res = await runBd(['label', 'add', id, label.trim()]);
+    const res = await runBd(['label', 'add', id, normalized_label]);
     if (res.code !== 0) {
       ws.send(
         JSON.stringify(makeError(req, 'bd_error', res.stderr || 'bd failed'))
@@ -1099,6 +1172,24 @@ export async function handleMessage(ws, data) {
     if (shown.code !== 0) {
       ws.send(
         JSON.stringify(makeError(req, 'bd_error', shown.stderr || 'bd failed'))
+      );
+      return;
+    }
+    const issue = getIssueFromShowPayload(shown.stdoutJson);
+    const published = await publishTransitionIfConfigured(
+      issue,
+      null,
+      normalized_label
+    );
+    if (!published.ok) {
+      ws.send(
+        JSON.stringify(
+          makeError(
+            req,
+            'bd_error',
+            published.error || 'Failed to publish RabbitMQ transition event'
+          )
+        )
       );
       return;
     }
@@ -1114,11 +1205,12 @@ export async function handleMessage(ws, data) {
   // label-remove: payload { id: string, label: string }
   if (req.type === 'label-remove') {
     const { id, label } = /** @type {any} */ (req.payload || {});
+    const normalized_label = String(label || '').trim();
     if (
       typeof id !== 'string' ||
       id.length === 0 ||
       typeof label !== 'string' ||
-      label.trim().length === 0
+      normalized_label.length === 0
     ) {
       ws.send(
         JSON.stringify(
@@ -1131,7 +1223,7 @@ export async function handleMessage(ws, data) {
       );
       return;
     }
-    const res = await runBd(['label', 'remove', id, label.trim()]);
+    const res = await runBd(['label', 'remove', id, normalized_label]);
     if (res.code !== 0) {
       ws.send(
         JSON.stringify(makeError(req, 'bd_error', res.stderr || 'bd failed'))
@@ -1142,6 +1234,24 @@ export async function handleMessage(ws, data) {
     if (shown.code !== 0) {
       ws.send(
         JSON.stringify(makeError(req, 'bd_error', shown.stderr || 'bd failed'))
+      );
+      return;
+    }
+    const issue = getIssueFromShowPayload(shown.stdoutJson);
+    const published = await publishTransitionIfConfigured(
+      issue,
+      normalized_label,
+      null
+    );
+    if (!published.ok) {
+      ws.send(
+        JSON.stringify(
+          makeError(
+            req,
+            'bd_error',
+            published.error || 'Failed to publish RabbitMQ transition event'
+          )
+        )
       );
       return;
     }

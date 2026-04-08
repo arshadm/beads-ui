@@ -1,5 +1,9 @@
 import { ISSUE_TYPES, typeLabel } from '../utils/issue-type.js';
 import { priority_levels } from '../utils/priority.js';
+import {
+  DEFAULT_WORKFLOW_LABEL,
+  isWorkflowLabel
+} from '../utils/workflow-labels.js';
 
 /**
  * Create and manage the New Issue dialog (native <dialog>).
@@ -214,6 +218,10 @@ export function createNewIssueDialog(mount_element, sendFn, router, store) {
       .split(',')
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+    const normalized_labels = [
+      DEFAULT_WORKFLOW_LABEL,
+      ...labels.filter((label) => !isWorkflowLabel(label))
+    ];
 
     /** @type {{ title: string, type?: string, priority?: number, description?: string }} */
     const payload = { title };
@@ -265,8 +273,8 @@ export function createNewIssueDialog(mount_element, sendFn, router, store) {
     }
 
     // Apply labels if any
-    if (created_id && labels.length > 0) {
-      for (const label of labels) {
+    if (created_id && normalized_labels.length > 0) {
+      for (const label of normalized_labels) {
         try {
           await sendFn('label-add', { id: created_id, label });
         } catch {

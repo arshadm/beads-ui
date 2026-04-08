@@ -749,4 +749,56 @@ describe('views/list', () => {
     await Promise.resolve();
     expect(mount.querySelectorAll('tr.issue-row').length).toBe(2);
   });
+
+  test('filters by workflow labels with OR semantics', async () => {
+    document.body.innerHTML = '<aside id="mount" class="panel"></aside>';
+    const mount = /** @type {HTMLElement} */ (document.getElementById('mount'));
+    const issues = [
+      { id: 'UI-1', title: 'A', status: 'open', labels: ['created'] },
+      {
+        id: 'UI-2',
+        title: 'B',
+        status: 'open',
+        labels: ['needs-planning', 'frontend']
+      },
+      { id: 'UI-3', title: 'C', status: 'open', labels: ['planned'] }
+    ];
+    const issueStores = createTestIssueStores();
+    issueStores.getStore('tab:issues').applyPush({
+      type: 'snapshot',
+      id: 'tab:issues',
+      revision: 1,
+      issues
+    });
+    const view = createListView(
+      mount,
+      async () => [],
+      undefined,
+      undefined,
+      undefined,
+      issueStores
+    );
+    await view.load();
+
+    expect(mount.querySelectorAll('tr.issue-row').length).toBe(3);
+
+    toggleFilter(mount, 2, 'created');
+    await Promise.resolve();
+    let rows = Array.from(mount.querySelectorAll('tr.issue-row')).map(
+      (el) => el.getAttribute('data-issue-id') || ''
+    );
+    expect(rows).toEqual(['UI-1']);
+
+    toggleFilter(mount, 2, 'needs-planning');
+    await Promise.resolve();
+    rows = Array.from(mount.querySelectorAll('tr.issue-row')).map(
+      (el) => el.getAttribute('data-issue-id') || ''
+    );
+    expect(rows).toEqual(['UI-1', 'UI-2']);
+
+    toggleFilter(mount, 2, 'created');
+    toggleFilter(mount, 2, 'needs-planning');
+    await Promise.resolve();
+    expect(mount.querySelectorAll('tr.issue-row').length).toBe(3);
+  });
 });
