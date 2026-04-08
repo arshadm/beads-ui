@@ -136,8 +136,16 @@ bd label add <id-closed> closed
   `$XDG_RUNTIME_DIR/beads-ui` or the system temp dir.
 - `HOST`: overrides the bind address (default `127.0.0.1`).
 - `PORT`: overrides the listen port (default `3000`).
+- `RABBITMQ_URL`: optional RabbitMQ connection URL (for transition events).
+- `RABBITMQ_QUEUE`: queue name used for transition event publishing.
 
 These can also be set via CLI options: `bdui start --host 0.0.0.0 --port 8080`
+
+RabbitMQ transition events are optional. When both `RABBITMQ_URL` and
+`RABBITMQ_QUEUE` are set, status changes and label transitions publish messages
+with `taskId`, `previousLabel`, `newLabel`, and `taskStatus`. If publishing
+fails while configured, the transition action is rejected and returned as an
+error to the UI.
 
 ## Platform notes
 

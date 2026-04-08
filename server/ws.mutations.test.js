@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { runBd, runBdJson } from './bd.js';
-import { handleMessage } from './ws.js';
+import { handleMessage, setTransitionPublisher } from './ws.js';
 
 vi.mock('./bd.js', () => ({ runBdJson: vi.fn(), runBd: vi.fn() }));
 
@@ -8,6 +8,7 @@ vi.mock('./bd.js', () => ({ runBdJson: vi.fn(), runBd: vi.fn() }));
 beforeEach(() => {
   /** @type {import('vitest').Mock} */ (runBd).mockReset();
   /** @type {import('vitest').Mock} */ (runBdJson).mockReset();
+  setTransitionPublisher(null);
 });
 
 function makeStubSocket() {
@@ -338,5 +339,68 @@ describe('ws mutation handlers', () => {
     const obj = JSON.parse(ws.sent[ws.sent.length - 1]);
     expect(obj.ok).toBe(true);
     expect(obj.payload && obj.payload.created).toBe(true);
+  });
+
+  test('update-status publishes transition event when rabbit is configured', async () => {
+    const mRun = /** @type {import('vitest').Mock} */ (runBd);
+    const mJson = /** @type {import('vitest').Mock} */ (runBdJson);
+    mRun.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
+    mJson.mockResolvedValueOnce({
+      code: 0,
+      stdoutJson: { id: 'UI-21', status: 'closed' }
+    });
+    const publish = vi.fn(async () => ({ ok: true }));
+    setTransitionPublisher({
+      isEnabled: () => true,
+      publishTransitionEvent: publish
+    });
+
+    const ws = makeStubSocket();
+    const req = {
+      id: 'r8',
+      type: 'update-status',
+      payload: { id: 'UI-21', status: 'closed' }
+    };
+    await handleMessage(
+      /** @type {any} */ (ws),
+      Buffer.from(JSON.stringify(req))
+    );
+    expect(publish).toHaveBeenCalledWith({
+      taskId: 'UI-21',
+      previousLabel: null,
+      newLabel: null,
+      taskStatus: 'closed'
+    });
+    const obj = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(obj.ok).toBe(true);
+  });
+
+  test('update-status fails when rabbit publish fails', async () => {
+    const mRun = /** @type {import('vitest').Mock} */ (runBd);
+    const mJson = /** @type {import('vitest').Mock} */ (runBdJson);
+    mRun.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
+    mJson.mockResolvedValueOnce({
+      code: 0,
+      stdoutJson: { id: 'UI-22', status: 'open' }
+    });
+    setTransitionPublisher({
+      isEnabled: () => true,
+      publishTransitionEvent: async () => ({ ok: false, error: 'rabbit down' })
+    });
+
+    const ws = makeStubSocket();
+    const req = {
+      id: 'r9',
+      type: 'update-status',
+      payload: { id: 'UI-22', status: 'open' }
+    };
+    await handleMessage(
+      /** @type {any} */ (ws),
+      Buffer.from(JSON.stringify(req))
+    );
+    const obj = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(obj.ok).toBe(false);
+    expect(obj.error.code).toBe('bd_error');
+    expect(obj.error.message).toContain('rabbit down');
   });
 });
