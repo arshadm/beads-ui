@@ -15,6 +15,7 @@ import { keyOf, registry } from './subscriptions.js';
 import { validateSubscribeListPayload } from './validators.js';
 
 const log = debug('ws');
+const RABBIT_TRIGGER_LABELS = new Set(['needs-planning', 'ready-for-dev']);
 /** @type {{ isEnabled?: () => boolean, publishTransitionEvent?: (event: { taskId: string, previousLabel: string | null, newLabel: string | null, taskStatus: string }) => Promise<{ ok: boolean, error?: string }> } | null} */
 let TRANSITION_PUBLISHER = null;
 
@@ -65,6 +66,9 @@ async function publishTransitionIfConfigured(issue, previousLabel, newLabel) {
     typeof TRANSITION_PUBLISHER.publishTransitionEvent !== 'function'
   ) {
     return { ok: false, error: 'Missing issue data for RabbitMQ publish' };
+  }
+  if (!newLabel || !RABBIT_TRIGGER_LABELS.has(newLabel)) {
+    return { ok: true };
   }
   return TRANSITION_PUBLISHER.publishTransitionEvent({
     taskId: issue.id,
@@ -863,20 +867,6 @@ export async function handleMessage(ws, data) {
     if (shown.code !== 0) {
       ws.send(
         JSON.stringify(makeError(req, 'bd_error', shown.stderr || 'bd failed'))
-      );
-      return;
-    }
-    const issue = getIssueFromShowPayload(shown.stdoutJson);
-    const published = await publishTransitionIfConfigured(issue, null, null);
-    if (!published.ok) {
-      ws.send(
-        JSON.stringify(
-          makeError(
-            req,
-            'bd_error',
-            published.error || 'Failed to publish RabbitMQ transition event'
-          )
-        )
       );
       return;
     }

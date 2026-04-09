@@ -341,7 +341,7 @@ describe('ws mutation handlers', () => {
     expect(obj.payload && obj.payload.created).toBe(true);
   });
 
-  test('update-status publishes transition event when rabbit is configured', async () => {
+  test('update-status does not publish transition event', async () => {
     const mRun = /** @type {import('vitest').Mock} */ (runBd);
     const mJson = /** @type {import('vitest').Mock} */ (runBdJson);
     mRun.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
@@ -365,17 +365,12 @@ describe('ws mutation handlers', () => {
       /** @type {any} */ (ws),
       Buffer.from(JSON.stringify(req))
     );
-    expect(publish).toHaveBeenCalledWith({
-      taskId: 'UI-21',
-      previousLabel: null,
-      newLabel: null,
-      taskStatus: 'closed'
-    });
+    expect(publish).not.toHaveBeenCalled();
     const obj = JSON.parse(ws.sent[ws.sent.length - 1]);
     expect(obj.ok).toBe(true);
   });
 
-  test('update-status fails when rabbit publish fails', async () => {
+  test('update-status succeeds even when publisher would fail', async () => {
     const mRun = /** @type {import('vitest').Mock} */ (runBd);
     const mJson = /** @type {import('vitest').Mock} */ (runBdJson);
     mRun.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
@@ -383,9 +378,10 @@ describe('ws mutation handlers', () => {
       code: 0,
       stdoutJson: { id: 'UI-22', status: 'open' }
     });
+    const publish = vi.fn(async () => ({ ok: false, error: 'rabbit down' }));
     setTransitionPublisher({
       isEnabled: () => true,
-      publishTransitionEvent: async () => ({ ok: false, error: 'rabbit down' })
+      publishTransitionEvent: publish
     });
 
     const ws = makeStubSocket();
@@ -399,8 +395,7 @@ describe('ws mutation handlers', () => {
       Buffer.from(JSON.stringify(req))
     );
     const obj = JSON.parse(ws.sent[ws.sent.length - 1]);
-    expect(obj.ok).toBe(false);
-    expect(obj.error.code).toBe('bd_error');
-    expect(obj.error.message).toContain('rabbit down');
+    expect(publish).not.toHaveBeenCalled();
+    expect(obj.ok).toBe(true);
   });
 });

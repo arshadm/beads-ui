@@ -137,15 +137,22 @@ bd label add <id-closed> closed
 - `HOST`: overrides the bind address (default `127.0.0.1`).
 - `PORT`: overrides the listen port (default `3000`).
 - `RABBITMQ_URL`: optional RabbitMQ connection URL (for transition events).
-- `RABBITMQ_QUEUE`: queue name used for transition event publishing.
+- `RABBITMQ_QUEUE`: queue prefix used for transition event publishing.
 
 These can also be set via CLI options: `bdui start --host 0.0.0.0 --port 8080`
 
 RabbitMQ transition events are optional. When both `RABBITMQ_URL` and
-`RABBITMQ_QUEUE` are set, status changes and label transitions publish messages
-with `taskId`, `previousLabel`, `newLabel`, and `taskStatus`. If publishing
-fails while configured, the transition action is rejected and returned as an
-error to the UI.
+`RABBITMQ_QUEUE` are set, only transitions to `needs-planning` and
+`ready-for-dev` publish messages with `taskId`, `previousLabel`, `newLabel`,
+and `taskStatus`.
+
+The queue prefix is expanded to concrete queue names:
+
+- `{prefix}-plan` when transitioning to `needs-planning`
+- `{prefix}-execute` when transitioning to `ready-for-dev`
+
+If publishing fails while configured, the transition action is rejected and
+returned as an error to the UI.
 
 ## Platform notes
 

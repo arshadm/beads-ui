@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
  * (i.e., the current working directory) so DB resolution follows the
  * caller's context rather than the install location.
  *
- * @returns {{ host: string, port: number, app_dir: string, root_dir: string, url: string, rabbitmq: { url: string, queue: string, enabled: boolean } }}
+ * @returns {{ host: string, port: number, app_dir: string, root_dir: string, url: string, rabbitmq: { url: string, queuePrefix: string, enabled: boolean } }}
  */
 export function getConfig() {
   const this_file = fileURLToPath(new URL(import.meta.url));
@@ -26,7 +26,7 @@ export function getConfig() {
   const host_env = process.env.HOST;
   const host_value = host_env && host_env.length > 0 ? host_env : '127.0.0.1';
   const rabbitmq_url = String(process.env.RABBITMQ_URL || '').trim();
-  const rabbitmq_queue = String(process.env.RABBITMQ_QUEUE || '').trim();
+  const rabbitmq_queue_prefix = String(process.env.RABBITMQ_QUEUE || '').trim();
 
   return {
     host: host_value,
@@ -36,8 +36,8 @@ export function getConfig() {
     url: `http://${host_value}:${port_value}`,
     rabbitmq: {
       url: rabbitmq_url,
-      queue: rabbitmq_queue,
-      enabled: rabbitmq_url.length > 0 && rabbitmq_queue.length > 0
+      queuePrefix: rabbitmq_queue_prefix,
+      enabled: rabbitmq_url.length > 0 && rabbitmq_queue_prefix.length > 0
     }
   };
 }

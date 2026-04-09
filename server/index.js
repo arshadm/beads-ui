@@ -32,6 +32,23 @@ const server = createServer(app);
 const log = debug('server');
 const rabbit_publisher = createRabbitPublisher(config.rabbitmq);
 setTransitionPublisher(rabbit_publisher);
+if (rabbit_publisher.isEnabled()) {
+  console.log(
+    'rabbitmq   enabled labels=[needs-planning, ready-for-dev] queues=[%s-plan, %s-execute]',
+    config.rabbitmq.queuePrefix,
+    config.rabbitmq.queuePrefix
+  );
+  log(
+    'rabbitmq publishing enabled: labels=[needs-planning, ready-for-dev] queues=[%s-plan, %s-execute]',
+    config.rabbitmq.queuePrefix,
+    config.rabbitmq.queuePrefix
+  );
+} else {
+  console.log(
+    'rabbitmq   disabled (set RABBITMQ_URL and RABBITMQ_QUEUE to enable publishing)'
+  );
+  log('rabbitmq publishing disabled (set RABBITMQ_URL and RABBITMQ_QUEUE)');
+}
 
 // Register the initial workspace (from cwd) so it appears in the workspace picker
 // even without the beads daemon running

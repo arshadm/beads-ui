@@ -15,7 +15,7 @@ const log = debug('rabbitmq');
 /**
  * @typedef {{
  *   url: string,
- *   queue: string,
+ *   queuePrefix: string,
  *   enabled: boolean
  * }} RabbitConfig
  */
@@ -26,19 +26,42 @@ const log = debug('rabbitmq');
 export function createRabbitPublisher(config) {
   /** @type {any | null} */
   let connection = null;
-  /** @type {any | null} */
-  let channel = null;
+  /** @type {Map<string, any>} */
+  const channels = new Map();
+  const PLAN_STATE = 'needs-planning';
+  const EXECUTE_STATE = 'ready-for-dev';
 
-  async function ensureChannel() {
+  /**
+   * @param {TransitionEvent} event
+   * @returns {string | null}
+   */
+  function resolveQueueName(event) {
+    if (event.newLabel === PLAN_STATE) {
+      return `${config.queuePrefix}-plan`;
+    }
+    if (event.newLabel === EXECUTE_STATE) {
+      return `${config.queuePrefix}-execute`;
+    }
+    return null;
+  }
+
+  /**
+   * @param {string} queueName
+   */
+  async function ensureChannel(queueName) {
     if (!config.enabled) {
       return null;
     }
-    if (channel) {
-      return channel;
+    const existingChannel = channels.get(queueName);
+    if (existingChannel) {
+      return existingChannel;
     }
-    connection = await connect(config.url);
-    channel = await connection.createChannel();
-    await channel.assertQueue(config.queue, { durable: true });
+    if (!connection) {
+      connection = await connect(config.url);
+    }
+    const channel = await connection.createChannel();
+    await channel.assertQueue(queueName, { durable: true });
+    channels.set(queueName, channel);
     return channel;
   }
 
@@ -53,13 +76,17 @@ export function createRabbitPublisher(config) {
       if (!config.enabled) {
         return { ok: true };
       }
+      const queueName = resolveQueueName(event);
+      if (!queueName) {
+        return { ok: true };
+      }
       try {
-        const ch = await ensureChannel();
+        const ch = await ensureChannel(queueName);
         if (!ch) {
           return { ok: true };
         }
         const payload = Buffer.from(JSON.stringify(event), 'utf8');
-        const sent = ch.sendToQueue(config.queue, payload, { persistent: true });
+        const sent = ch.sendToQueue(queueName, payload, { persistent: true });
         if (!sent) {
           return { ok: false, error: 'RabbitMQ sendToQueue returned false' };
         }
@@ -77,13 +104,13 @@ export function createRabbitPublisher(config) {
     },
     async close() {
       try {
-        if (channel) {
+        for (const channel of channels.values()) {
           await channel.close();
         }
       } catch {
         // ignore close errors
       } finally {
-        channel = null;
+        channels.clear();
       }
       try {
         if (connection) {

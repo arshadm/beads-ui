@@ -68,13 +68,13 @@ describe('ws labels handlers', () => {
     expect(obj.error.code).toBe('bad_request');
   });
 
-  test('label-add runs bd and replies with show', async () => {
+  test('label-add publishes when transitioning to needs-planning', async () => {
     const rb = /** @type {import('vitest').Mock} */ (runBd);
     const rj = /** @type {import('vitest').Mock} */ (runBdJson);
     rb.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
     rj.mockResolvedValueOnce({
       code: 0,
-      stdoutJson: { id: 'UI-1', labels: ['frontend'], status: 'open' }
+      stdoutJson: { id: 'UI-1', labels: ['needs-planning'], status: 'open' }
     });
 
     const ws = makeStubSocket();
@@ -89,7 +89,7 @@ describe('ws labels handlers', () => {
         JSON.stringify({
           id: 'a',
           type: /** @type {any} */ ('label-add'),
-          payload: { id: 'UI-1', label: 'frontend' }
+          payload: { id: 'UI-1', label: 'needs-planning' }
         })
       )
     );
@@ -99,7 +99,7 @@ describe('ws labels handlers', () => {
     expect(publish).toHaveBeenCalledWith({
       taskId: 'UI-1',
       previousLabel: null,
-      newLabel: 'frontend',
+      newLabel: 'needs-planning',
       taskStatus: 'open'
     });
     const obj = JSON.parse(ws.sent[ws.sent.length - 1]);
@@ -107,7 +107,7 @@ describe('ws labels handlers', () => {
     expect(obj.payload && obj.payload.id).toBe('UI-1');
   });
 
-  test('label-remove runs bd and replies with show', async () => {
+  test('label-remove does not publish when leaving unrelated label', async () => {
     const rb = /** @type {import('vitest').Mock} */ (runBd);
     const rj = /** @type {import('vitest').Mock} */ (runBdJson);
     rb.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
@@ -135,24 +135,19 @@ describe('ws labels handlers', () => {
 
     const call = rb.mock.calls[rb.mock.calls.length - 1][0];
     expect(call.slice(0, 3)).toEqual(['label', 'remove', 'UI-1']);
-    expect(publish).toHaveBeenCalledWith({
-      taskId: 'UI-1',
-      previousLabel: 'frontend',
-      newLabel: null,
-      taskStatus: 'open'
-    });
+    expect(publish).not.toHaveBeenCalled();
     const obj = JSON.parse(ws.sent[ws.sent.length - 1]);
     expect(obj.ok).toBe(true);
     expect(obj.payload && obj.payload.id).toBe('UI-1');
   });
 
-  test('label-add fails when rabbit publish fails', async () => {
+  test('label-add fails when rabbit publish fails for ready-for-dev', async () => {
     const rb = /** @type {import('vitest').Mock} */ (runBd);
     const rj = /** @type {import('vitest').Mock} */ (runBdJson);
     rb.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
     rj.mockResolvedValueOnce({
       code: 0,
-      stdoutJson: { id: 'UI-1', labels: ['frontend'], status: 'open' }
+      stdoutJson: { id: 'UI-1', labels: ['ready-for-dev'], status: 'open' }
     });
     setTransitionPublisher({
       isEnabled: () => true,
@@ -166,7 +161,7 @@ describe('ws labels handlers', () => {
         JSON.stringify({
           id: 'a-fail',
           type: /** @type {any} */ ('label-add'),
-          payload: { id: 'UI-1', label: 'frontend' }
+          payload: { id: 'UI-1', label: 'ready-for-dev' }
         })
       )
     );
