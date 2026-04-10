@@ -6,6 +6,9 @@ const log = debug('rabbitmq');
 /**
  * @typedef {{
  *   taskId: string,
+ *   taskTitle: string,
+ *   taskLabels: string[],
+ *   taskProjectId: string | null,
  *   previousLabel: string | null,
  *   newLabel: string | null,
  *   taskStatus: string

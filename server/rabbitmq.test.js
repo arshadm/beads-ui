@@ -37,6 +37,9 @@ describe('rabbitmq publisher', async () => {
 
     const res = await publisher.publishTransitionEvent({
       taskId: 'UI-1',
+      taskTitle: 'Plan task',
+      taskLabels: ['needs-planning', 'frontend'],
+      taskProjectId: 'proj-1',
       previousLabel: 'created',
       newLabel: 'needs-planning',
       taskStatus: 'open'
@@ -51,6 +54,19 @@ describe('rabbitmq publisher', async () => {
       expect.any(Buffer),
       { persistent: true }
     );
+    const payload_buffer = /** @type {Buffer} */ (
+      send_to_queue.mock.calls[0][1]
+    );
+    const payload_json = JSON.parse(payload_buffer.toString('utf8'));
+    expect(payload_json).toEqual({
+      taskId: 'UI-1',
+      taskTitle: 'Plan task',
+      taskLabels: ['needs-planning', 'frontend'],
+      taskProjectId: 'proj-1',
+      previousLabel: 'created',
+      newLabel: 'needs-planning',
+      taskStatus: 'open'
+    });
   });
 
   test('publishes ready-for-dev to {prefix}-execute queue', async () => {
@@ -62,6 +78,9 @@ describe('rabbitmq publisher', async () => {
 
     const res = await publisher.publishTransitionEvent({
       taskId: 'UI-2',
+      taskTitle: 'Execute task',
+      taskLabels: ['ready-for-dev'],
+      taskProjectId: null,
       previousLabel: 'planned',
       newLabel: 'ready-for-dev',
       taskStatus: 'open'
@@ -87,6 +106,9 @@ describe('rabbitmq publisher', async () => {
 
     const res = await publisher.publishTransitionEvent({
       taskId: 'UI-3',
+      taskTitle: 'Unrelated task',
+      taskLabels: ['in-progress'],
+      taskProjectId: null,
       previousLabel: 'ready-for-dev',
       newLabel: 'in-progress',
       taskStatus: 'in_progress'

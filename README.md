@@ -143,8 +143,8 @@ These can also be set via CLI options: `bdui start --host 0.0.0.0 --port 8080`
 
 RabbitMQ transition events are optional. When both `RABBITMQ_URL` and
 `RABBITMQ_QUEUE` are set, only transitions to `needs-planning` and
-`ready-for-dev` publish messages with `taskId`, `previousLabel`, `newLabel`,
-and `taskStatus`.
+`ready-for-dev` publish messages with `taskId`, `taskTitle`, `taskLabels`,
+`taskProjectId` (nullable), `previousLabel`, `newLabel`, and `taskStatus`.
 
 The queue prefix is expanded to concrete queue names:
 

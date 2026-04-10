@@ -33,7 +33,13 @@ describe('ws labels handlers', () => {
     rb.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
     rj.mockResolvedValueOnce({
       code: 0,
-      stdoutJson: { id: 'UI-1', labels: ['frontend'], status: 'open' }
+      stdoutJson: {
+        id: 'UI-1',
+        title: 'UI title',
+        labels: ['frontend'],
+        project_id: 'proj-1',
+        status: 'open'
+      }
     });
 
     const ws = makeStubSocket();
@@ -74,7 +80,13 @@ describe('ws labels handlers', () => {
     rb.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
     rj.mockResolvedValueOnce({
       code: 0,
-      stdoutJson: { id: 'UI-1', labels: ['needs-planning'], status: 'open' }
+      stdoutJson: {
+        id: 'UI-1',
+        title: 'Plan task',
+        labels: ['needs-planning', 'frontend'],
+        project_id: 'proj-1',
+        status: 'open'
+      }
     });
 
     const ws = makeStubSocket();
@@ -98,6 +110,9 @@ describe('ws labels handlers', () => {
     expect(call.slice(0, 3)).toEqual(['label', 'add', 'UI-1']);
     expect(publish).toHaveBeenCalledWith({
       taskId: 'UI-1',
+      taskTitle: 'Plan task',
+      taskLabels: ['needs-planning', 'frontend'],
+      taskProjectId: 'proj-1',
       previousLabel: null,
       newLabel: 'needs-planning',
       taskStatus: 'open'
@@ -113,7 +128,12 @@ describe('ws labels handlers', () => {
     rb.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
     rj.mockResolvedValueOnce({
       code: 0,
-      stdoutJson: { id: 'UI-1', labels: [], status: 'open' }
+      stdoutJson: {
+        id: 'UI-1',
+        title: 'Task title',
+        labels: [],
+        status: 'open'
+      }
     });
 
     const ws = makeStubSocket();
@@ -147,7 +167,13 @@ describe('ws labels handlers', () => {
     rb.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
     rj.mockResolvedValueOnce({
       code: 0,
-      stdoutJson: { id: 'UI-1', labels: ['ready-for-dev'], status: 'open' }
+      stdoutJson: {
+        id: 'UI-1',
+        title: 'Exec task',
+        labels: ['ready-for-dev'],
+        projectId: 'proj-2',
+        status: 'open'
+      }
     });
     setTransitionPublisher({
       isEnabled: () => true,

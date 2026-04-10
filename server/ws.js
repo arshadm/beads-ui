@@ -16,11 +16,11 @@ import { validateSubscribeListPayload } from './validators.js';
 
 const log = debug('ws');
 const RABBIT_TRIGGER_LABELS = new Set(['needs-planning', 'ready-for-dev']);
-/** @type {{ isEnabled?: () => boolean, publishTransitionEvent?: (event: { taskId: string, previousLabel: string | null, newLabel: string | null, taskStatus: string }) => Promise<{ ok: boolean, error?: string }> } | null} */
+/** @type {{ isEnabled?: () => boolean, publishTransitionEvent?: (event: { taskId: string, taskTitle: string, taskLabels: string[], taskProjectId: string | null, previousLabel: string | null, newLabel: string | null, taskStatus: string }) => Promise<{ ok: boolean, error?: string }> } | null} */
 let TRANSITION_PUBLISHER = null;
 
 /**
- * @param {{ isEnabled?: () => boolean, publishTransitionEvent?: (event: { taskId: string, previousLabel: string | null, newLabel: string | null, taskStatus: string }) => Promise<{ ok: boolean, error?: string }> } | null} publisher
+ * @param {{ isEnabled?: () => boolean, publishTransitionEvent?: (event: { taskId: string, taskTitle: string, taskLabels: string[], taskProjectId: string | null, previousLabel: string | null, newLabel: string | null, taskStatus: string }) => Promise<{ ok: boolean, error?: string }> } | null} publisher
  */
 export function setTransitionPublisher(publisher) {
   TRANSITION_PUBLISHER = publisher;
@@ -28,23 +28,23 @@ export function setTransitionPublisher(publisher) {
 
 /**
  * @param {unknown} payload
- * @returns {{ id?: string, status?: string } | null}
+ * @returns {{ id?: string, title?: string, status?: string, labels?: unknown, project_id?: unknown, projectId?: unknown } | null}
  */
 function getIssueFromShowPayload(payload) {
   if (Array.isArray(payload)) {
     const first = payload[0];
     return first && typeof first === 'object'
-      ? /** @type {{ id?: string, status?: string }} */ (first)
+      ? /** @type {{ id?: string, title?: string, status?: string, labels?: unknown, project_id?: unknown, projectId?: unknown }} */ (first)
       : null;
   }
   if (payload && typeof payload === 'object') {
-    return /** @type {{ id?: string, status?: string }} */ (payload);
+    return /** @type {{ id?: string, title?: string, status?: string, labels?: unknown, project_id?: unknown, projectId?: unknown }} */ (payload);
   }
   return null;
 }
 
 /**
- * @param {{ id?: string, status?: string } | null} issue
+ * @param {{ id?: string, title?: string, status?: string, labels?: unknown, project_id?: unknown, projectId?: unknown } | null} issue
  * @param {string | null} previousLabel
  * @param {string | null} newLabel
  * @returns {Promise<{ ok: boolean, error?: string }>}
@@ -61,8 +61,11 @@ async function publishTransitionIfConfigured(issue, previousLabel, newLabel) {
     !issue ||
     typeof issue.id !== 'string' ||
     issue.id.length === 0 ||
+    typeof issue.title !== 'string' ||
+    issue.title.length === 0 ||
     typeof issue.status !== 'string' ||
     issue.status.length === 0 ||
+    !Array.isArray(issue.labels) ||
     typeof TRANSITION_PUBLISHER.publishTransitionEvent !== 'function'
   ) {
     return { ok: false, error: 'Missing issue data for RabbitMQ publish' };
@@ -70,8 +73,20 @@ async function publishTransitionIfConfigured(issue, previousLabel, newLabel) {
   if (!newLabel || !RABBIT_TRIGGER_LABELS.has(newLabel)) {
     return { ok: true };
   }
+  const task_labels = issue.labels
+    .filter((label) => typeof label === 'string')
+    .map((label) => String(label));
+  const project_id =
+    typeof issue.project_id === 'string'
+      ? issue.project_id
+      : typeof issue.projectId === 'string'
+        ? issue.projectId
+        : null;
   return TRANSITION_PUBLISHER.publishTransitionEvent({
     taskId: issue.id,
+    taskTitle: issue.title,
+    taskLabels: task_labels,
+    taskProjectId: project_id,
     previousLabel,
     newLabel,
     taskStatus: issue.status
