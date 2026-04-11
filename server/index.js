@@ -68,7 +68,7 @@ const db_watcher = watchDb(config.root_dir, () => {
   // v2: all updates flow via subscription push envelopes only
 });
 
-const { scheduleListRefresh } = attachWsServer(server, {
+const { scheduleListRefresh, wss } = attachWsServer(server, {
   path: '/ws',
   heartbeat_ms: 30000,
   // Coalesce DB change bursts into one refresh run
@@ -79,7 +79,7 @@ const { scheduleListRefresh } = attachWsServer(server, {
 
 // Watch the global registry for workspace changes (e.g., when user starts
 // bd daemon in a different project). This enables automatic workspace switching.
-watchRegistry(
+const registry_watcher = watchRegistry(
   (entries) => {
     log('registry changed: %d entries', entries.length);
     // Find if there's a newer workspace that matches our initial root
@@ -98,8 +98,39 @@ server.on('error', (err) => {
   process.exitCode = 1;
 });
 
+let shutting_down = false;
+
+/**
+ * Close listeners and watchers so the process can exit (systemd SIGTERM, Ctrl+C).
+ *
+ * @param {string} signal
+ */
+function gracefulShutdown(signal) {
+  if (shutting_down) {
+    process.exit(1);
+  }
+  shutting_down = true;
+  log('received %s, shutting down', signal);
+
+  registry_watcher.close();
+  db_watcher.close();
+
+  wss.close(() => {
+    server.close(() => {
+      void (async () => {
+        try {
+          await rabbit_publisher.close();
+        } catch {
+          // ignore close errors
+        }
+        process.exit(0);
+      })();
+    });
+  });
+}
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    void rabbit_publisher.close();
+    gracefulShutdown(signal);
   });
 }
