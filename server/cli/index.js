@@ -1,13 +1,18 @@
 import { readFile } from 'node:fs/promises';
 import { enableAllDebug } from '../logging.js';
-import { handleRestart, handleStart, handleStop } from './commands.js';
+import {
+  handleRestart,
+  handleService,
+  handleStart,
+  handleStop
+} from './commands.js';
 import { printUsage } from './usage.js';
 
 /**
  * Parse argv into a command token, flags, and options.
  *
  * @param {string[]} args
- * @returns {{ command: string | null, flags: string[], options: { host?: string, port?: number } }}
+ * @returns {{ command: string | null, flags: string[], options: { host?: string, port?: number } }} command is start | stop | restart | service when set
  */
 export function parseArgs(args) {
   /** @type {string[]} */
@@ -48,7 +53,10 @@ export function parseArgs(args) {
     }
     if (
       !command &&
-      (token === 'start' || token === 'stop' || token === 'restart')
+      (token === 'start' ||
+        token === 'stop' ||
+        token === 'restart' ||
+        token === 'service')
     ) {
       command = token;
       continue;
@@ -115,6 +123,15 @@ export async function main(args) {
       port: options.port
     };
     return await handleStart(start_options);
+  }
+  if (command === 'service') {
+    const service_options = {
+      open: flags.includes('open'),
+      is_debug: is_debug || Boolean(process.env.DEBUG),
+      host: options.host,
+      port: options.port
+    };
+    return await handleService(service_options);
   }
   if (command === 'stop') {
     return await handleStop();

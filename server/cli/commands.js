@@ -148,6 +148,41 @@ export async function handleStart(options) {
 }
 
 /**
+ * Run the HTTP server in the foreground for process supervisors (systemd, etc.).
+ * Loads the server in this process so the main PID stays alive and receives
+ * signals directly. Does not spawn a detached daemon or write the PID file.
+ *
+ * @param {{ open?: boolean, is_debug?: boolean, host?: string, port?: number }} [options]
+ * @returns {Promise<number>} Resolves only if the server module fails to load; otherwise blocks until the process exits.
+ */
+export async function handleService(options) {
+  const should_open = options?.open === true;
+
+  if (options?.host) {
+    process.env.HOST = options.host;
+  }
+  if (options?.port) {
+    process.env.PORT = String(options.port);
+  }
+
+  try {
+    await import('../index.js');
+  } catch (err) {
+    console.error('service: failed to start server', err);
+    return 1;
+  }
+
+  if (should_open) {
+    const { url } = getConfig();
+    await waitForServer(url, 600);
+    await openUrl(url);
+  }
+
+  await new Promise(() => {});
+  return 0;
+}
+
+/**
  * @param {number} ms
  * @returns {Promise<void>}
  */

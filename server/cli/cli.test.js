@@ -15,6 +15,7 @@ vi.mock('../logging.js', () => ({
 
 vi.mock('./commands.js', () => ({
   handleStart: vi.fn().mockResolvedValue(0),
+  handleService: vi.fn().mockResolvedValue(0),
   handleStop: vi.fn().mockResolvedValue(0),
   handleRestart: vi.fn().mockResolvedValue(0)
 }));
@@ -43,6 +44,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['start']).command).toBe('start');
     expect(parseArgs(['stop']).command).toBe('stop');
     expect(parseArgs(['restart']).command).toBe('restart');
+    expect(parseArgs(['service']).command).toBe('service');
   });
 
   test('recognizes --debug and -d flags', () => {
@@ -154,6 +156,30 @@ describe('main', () => {
 
     const output = write_spy.mock.calls.map((c) => String(c[0])).join('');
     expect(output.includes('--open')).toBe(true);
+  });
+
+  test('dispatches to service handler', async () => {
+    const code = await main(['service']);
+
+    expect(code).toBe(0);
+    expect(commands.handleService).toHaveBeenCalledTimes(1);
+    expect(commands.handleService).toHaveBeenCalledWith({
+      open: false,
+      is_debug: false,
+      host: undefined,
+      port: undefined
+    });
+  });
+
+  test('propagates --host and --port to service handler', async () => {
+    await main(['service', '--host', '0.0.0.0', '--port', '8080']);
+
+    expect(commands.handleService).toHaveBeenCalledWith({
+      open: false,
+      is_debug: false,
+      host: '0.0.0.0',
+      port: 8080
+    });
   });
 
   test('dispatches to stop handler', async () => {
