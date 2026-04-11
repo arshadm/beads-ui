@@ -122,6 +122,36 @@ describe('runBd', () => {
     expect(res.stderr).toContain('boom');
   });
 
+  test('exit 127 with empty stderr adds BD_BIN hint', async () => {
+    mockedSpawn.mockReturnValueOnce(makeFakeProc('', '', 127));
+    const res = await runBd(['list']);
+    expect(res.code).toBe(127);
+    expect(res.stderr).toContain('BD_BIN');
+  });
+
+  test('spawn ENOENT resolves once with hint', async () => {
+    const cp = /** @type {any} */ (new EventEmitter());
+    const out = new PassThrough();
+    const err = new PassThrough();
+    cp.stdout = out;
+    cp.stderr = err;
+    mockedSpawn.mockReturnValueOnce(cp);
+    setTimeout(() => {
+      cp.emit(
+        'error',
+        Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' })
+      );
+      out.end();
+      err.end();
+      cp.emit('close', 127);
+    }, 0);
+
+    const res = await runBd(['list']);
+    expect(res.code).toBe(127);
+    expect(res.stderr).toContain('BD_BIN');
+    expect(res.stderr).toContain('not found');
+  });
+
   test('sets BEADS_DB for workspace-local SQLite db', async () => {
     const root = make_temp_dir();
     const beads_dir = path.join(root, '.beads');

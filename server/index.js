@@ -101,6 +101,26 @@ server.on('error', (err) => {
 let shutting_down = false;
 
 /**
+ * Close RabbitMQ with a time bound so a stuck broker cannot delay systemd restart.
+ *
+ * @param {number} budget_ms
+ */
+async function closeRabbitWithBudget(budget_ms) {
+  try {
+    await Promise.race([
+      rabbit_publisher.close(),
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('rabbit close timeout'));
+        }, budget_ms);
+      })
+    ]);
+  } catch (err) {
+    log('shutdown: rabbit close skipped or timed out %o', err);
+  }
+}
+
+/**
  * Close listeners and watchers so the process can exit (systemd SIGTERM, Ctrl+C).
  *
  * @param {string} signal
@@ -115,17 +135,35 @@ function gracefulShutdown(signal) {
   registry_watcher.close();
   db_watcher.close();
 
+  for (const ws of wss.clients) {
+    try {
+      ws.terminate();
+    } catch {
+      // ignore
+    }
+  }
+
   wss.close(() => {
     server.close(() => {
       void (async () => {
         try {
-          await rabbit_publisher.close();
-        } catch {
-          // ignore close errors
+          const rabbit_ms = Number.parseInt(
+            process.env.BDUI_SHUTDOWN_RABBIT_MS || '3000',
+            10
+          );
+          const budget =
+            Number.isFinite(rabbit_ms) && rabbit_ms > 0 ? rabbit_ms : 3000;
+          await closeRabbitWithBudget(budget);
+        } catch (err) {
+          log('shutdown: error %o', err);
+        } finally {
+          process.exit(0);
         }
-        process.exit(0);
       })();
     });
+    if (typeof server.closeAllConnections === 'function') {
+      server.closeAllConnections();
+    }
   });
 }
 

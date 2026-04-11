@@ -6,6 +6,10 @@ const log = debug('bd');
 /** @type {Promise<void>} */
 let bd_run_queue = Promise.resolve();
 
+const BD_NOT_FOUND_HINT =
+  'Set BD_BIN to the full path of the bd executable, or extend PATH ' +
+  '(systemd services often use a minimal PATH; use Environment=PATH=… or Environment=BD_BIN=… in the unit).';
+
 /**
  * Get the git user name from git config.
  *
@@ -126,23 +130,45 @@ function runBdUnlocked(args, options = {}) {
       timer.unref?.();
     }
 
+    let settled = false;
+
     /**
-     * @param {number | string | null} code
+     * @param {number | string | null | undefined} code
      */
     const finish = (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       if (timer) {
         clearTimeout(timer);
       }
+      const n =
+        typeof code === 'number' && Number.isFinite(code)
+          ? code
+          : Number(code || 0);
+      let stderr = err_chunks.join('');
+      if (n === 127 && stderr.length === 0) {
+        stderr = `Cannot run "${bin}" (exit 127). ${BD_NOT_FOUND_HINT}`;
+      }
       resolve({
-        code: Number(code || 0),
+        code: n,
         stdout: out_chunks.join(''),
-        stderr: err_chunks.join('')
+        stderr
       });
     };
 
     child.on('error', (err) => {
-      // Treat spawn error as an immediate non-zero exit; log for diagnostics.
       log('spawn error running %s %o', bin, err);
+      const errno =
+        err && typeof err === 'object' && err !== null && 'code' in err
+          ? String(/** @type {{ code?: unknown }} */ (err).code)
+          : '';
+      if (errno === 'ENOENT') {
+        err_chunks.push(`Cannot run "${bin}" (not found). ${BD_NOT_FOUND_HINT}`);
+      } else if (err instanceof Error) {
+        err_chunks.push(err.message);
+      }
       finish(127);
     });
     child.on('close', (code) => {
